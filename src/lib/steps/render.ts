@@ -85,35 +85,12 @@ function fallbackScene(shot: Shot): string {
  * The heart of the prompt is the director's own `shotPrompt`: written after
  * looking at ALL the photos, so it states what is really in frame and what lies
  * in each direction (accurate furniture and layout, no invented rooms). We wrap
- * it with fixed guardrails:
+ * it with the camera motion and a fixed set of guardrails:
  *  - Fidelity: preserve the photo's real furniture/finishes; don't restyle.
  *  - Consistency: anything revealed off-frame must match the described space.
  *  - No people: the property is empty; humans kept appearing, so forbid them.
- *
- * Walkthrough legs (endImageUrl set) get the continuous first-person gimbal
- * treatment instead of a single camera move: the camera must physically travel
- * from the start frame's viewpoint to the end frame's viewpoint with no cuts.
  */
 export function promptFor(shot: Shot): string {
-  if (shot.endImageUrl) {
-    const scene =
-      shot.shotPrompt?.trim() ||
-      `Walk smoothly from the viewpoint of the first frame (${shot.room.split(" → ")[0]}) to the viewpoint of the last frame (${shot.room.split(" → ")[1] ?? "the next room"}).`;
-    return (
-      `${scene} ` +
-      "One continuous first-person walkthrough filmed on a stabilized gimbal by a " +
-      "professional real-estate videographer: the camera moves naturally and " +
-      "confidently from the exact first-frame viewpoint to the exact last-frame " +
-      "viewpoint in a single uninterrupted path. Photorealistic quality, bright " +
-      "inviting atmosphere, natural lighting, realistic depth and parallax. " +
-      "Preserve the exact architecture, room layout, furniture placement, decor, " +
-      "colours and materials shown in the two frames; maintain consistent spatial " +
-      "relationships and realistic room connections, prioritizing accurate " +
-      "navigation over cinematic effects. No cuts, no teleporting between rooms, " +
-      "no floating camera, no people, no text, no added objects, no redesigned " +
-      "spaces, no hallucinated features, no distortion, and no camera shake."
-    );
-  }
   const scene = shot.shotPrompt?.trim() || fallbackScene(shot);
   return (
     `${MOTION_PHRASE[shot.motion]}. ${scene} ` +
@@ -228,61 +205,6 @@ async function withConcurrencyRetry<T>(
   }
 }
 
-/**
- * Poll a first-last-frame request (the newer /requests API) to completion and
- * return the clip URL. Mirrors pollJobSet's logging/timeout behavior.
- */
-async function pollRequest(
-  statusUrl: string,
-  label: string,
-  auth: string,
-  onStatus?: (status: string) => void,
-): Promise<string> {
-  const start = Date.now();
-  let last = "";
-  while (Date.now() - start < RENDER_MAX_POLL_MS) {
-    const secs = ((Date.now() - start) / 1000).toFixed(0);
-    let res: Response;
-    try {
-      res = await fetch(statusUrl, { headers: { Authorization: auth } });
-    } catch (e) {
-      log(`${label}: poll network error (${secs}s), retrying: ${String(e)}`);
-      await sleep(POLL_INTERVAL_MS);
-      continue;
-    }
-    if (res.status >= 500) {
-      log(`${label}: poll HTTP ${res.status} (${secs}s), retrying`);
-      await sleep(POLL_INTERVAL_MS);
-      continue;
-    }
-    if (!res.ok) {
-      throw new Error(`${label}: poll failed HTTP ${res.status}`);
-    }
-    const data = (await res.json().catch(() => ({}))) as {
-      status?: string;
-      video?: { url?: string };
-    };
-    const status = data.status ?? "unknown";
-    if (status !== last) {
-      log(`${label}: ${status} (${secs}s)`);
-      onStatus?.(status);
-      last = status;
-    }
-    if (status === "completed") {
-      const url = data.video?.url;
-      if (!url) throw new Error(`${label}: completed but no clip url`);
-      return url;
-    }
-    if (status === "failed" || status === "nsfw" || status === "canceled") {
-      throw new Error(`${label}: Higgsfield request ${status}`);
-    }
-    await sleep(POLL_INTERVAL_MS);
-  }
-  throw new Error(
-    `${label}: timed out after ${(RENDER_MAX_POLL_MS / 60000).toFixed(0)} min`,
-  );
-}
-
 export async function renderClips(
   shots: Shot[],
   onProgress?: (progress: RenderProgress) => void,
@@ -370,74 +292,52 @@ export async function renderClips(
     };
     const imageUrl = await resolve(shot.imageUrl);
 
+    const preset = motionByShot.get(shot.motion);
+    // Multi-photo room + a motion that supports a start/end frame pair: hand
+    // Higgsfield a second angle of the same room as the end frame, so the
+    // camera travels between two real views of the space.
+    let endImageUrl: string | undefined;
+    const secondPhoto = shot.imageUrls?.find((u) => u !== shot.imageUrl);
+    if (secondPhoto && preset?.startEnd) {
+      endImageUrl = await resolve(secondPhoto);
+    }
+
     // Prefer the prompt the user reviewed (and possibly edited) at the gate; it
     // was computed via promptFor() during directing, so this is identical unless
     // it was hand-edited, in which case the edit is authoritative.
     const prompt = shot.renderPrompt?.trim() || promptFor(shot);
-
-    // ---- Walkthrough leg: first-last-frame ---------------------------------
-    // The camera travels from the start photo to the end photo; consecutive
-    // legs share their boundary photo, so the stitched film has no cuts.
-    if (shot.endImageUrl) {
-      const endImageUrl = await resolve(shot.endImageUrl);
-      log(`${label}: submitting walk leg (first-last-frame)…`);
-      const statusUrl = await withConcurrencyRetry(label, async () => {
-        const res = await fetch(
-          `${HF_BASE}/higgsfield-ai/dop/turbo/first-last-frame`,
-          {
-            method: "POST",
-            headers: { Authorization: auth, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt,
-              image_url: imageUrl,
-              end_image_url: endImageUrl,
-            }),
-          },
-        );
-        const body = await res.text();
-        if (!res.ok) {
-          throw new Error(`${label}: submit HTTP ${res.status}: ${body.slice(0, 200)}`);
-        }
-        const data = JSON.parse(body) as { status_url?: string };
-        if (!data.status_url) {
-          throw new Error(`${label}: submit returned no status_url`);
-        }
-        return data.status_url;
-      });
-      log(`${label}: request created`);
-      report(index, shot.room, "queued");
-
-      const clipUrl = await pollRequest(statusUrl, label, auth, (status) => {
-        const stage: RenderStage =
-          status === "in_progress" || status === "processing"
-            ? "in_progress"
-            : "queued";
-        report(index, shot.room, stage);
-      });
-      completed++;
-      onProgress?.({ total: shots.length, completed });
-      log(`${label}: ✓ walk leg ready`);
-      return { ...shot, clipUrl, renderPrompt: prompt };
-    }
-
-    // ---- Classic single-frame clip (single-room fallback) ------------------
-    const preset = motionByShot.get(shot.motion);
     log(
-      `${label}: submitting (motion ${preset ? "preset" : "prompt-only"})…`,
+      `${label}: submitting (motion ${preset ? "preset" : "prompt-only"}` +
+        `${endImageUrl ? ", start+end frame" : ""})…`,
     );
     // withPolling:false - create the job, then poll ourselves with logging.
-    const submit = () =>
+    const submit = (withEndFrame: boolean) => () =>
       client.generate(
         "/v1/image2video/dop",
         {
           model: "dop-turbo",
           prompt,
-          input_images: [{ type: "image_url", image_url: imageUrl }],
+          input_images: [
+            { type: "image_url", image_url: imageUrl },
+            ...(withEndFrame && endImageUrl
+              ? [{ type: "image_url", image_url: endImageUrl }]
+              : []),
+          ],
           ...(preset ? { motions: [{ id: preset.id, strength: 0.8 }] } : {}),
         },
         { withPolling: false },
       );
-    const jobSet = await withConcurrencyRetry(label, submit);
+
+    let jobSet: Awaited<ReturnType<ReturnType<typeof submit>>>;
+    try {
+      jobSet = await withConcurrencyRetry(label, submit(Boolean(endImageUrl)));
+    } catch (e) {
+      // If the two-image submit is rejected, fall back to start frame only
+      // rather than failing the whole shot.
+      if (!endImageUrl) throw e;
+      log(`${label}: start+end frame rejected, retrying start-only: ${String(e)}`);
+      jobSet = await withConcurrencyRetry(label, submit(false));
+    }
     log(`${label}: job-set ${jobSet.id} created`);
     report(index, shot.room, "queued");
 

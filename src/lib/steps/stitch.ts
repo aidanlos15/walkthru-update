@@ -23,12 +23,6 @@ interface CreatomateRender {
 }
 
 function buildSource(shots: Shot[], title: string) {
-  // Walkthrough mode (legs with an end frame): consecutive clips share their
-  // boundary frame, so they concatenate as hard cuts with no trimming and no
-  // transitions — a crossfade or trim would break the seamless walk. Captions
-  // are dropped too: text popping up mid-walk breaks the first-person feel.
-  const walkthrough = shots.some((s) => s.endImageUrl);
-
   // Timeline length: title (no transition) + each scene overlapping the prior
   // by the crossfade duration.
   const total = TITLE_DUR + shots.length * (SCENE_DUR - TRANS);
@@ -53,39 +47,6 @@ function buildSource(shots: Shot[], title: string) {
       },
     ],
   };
-
-  if (walkthrough) {
-    return {
-      output_format: "mp4",
-      width: 1920,
-      height: 1080,
-      frame_rate: 30,
-      elements: [
-        titleCard,
-        // Each leg plays in full ("media" duration) and cuts directly into the
-        // next; the boundary frames are identical, so the walk looks unbroken.
-        ...shots.map((shot) => ({
-          type: "video",
-          track: 1,
-          source: shot.clipUrl,
-          fit: "cover",
-          duration: "media",
-          volume: "0%",
-        })),
-        {
-          type: "audio",
-          track: 2,
-          time: 0,
-          // Stretch to the full (unknown-length) timeline.
-          duration: null,
-          source: CREATOMATE_MUSIC_URL,
-          loop: true,
-          volume: "58%",
-          audio_fade_out: "1.2 s",
-        },
-      ],
-    };
-  }
 
   const scenes = shots.map((shot) => ({
     type: "composition",

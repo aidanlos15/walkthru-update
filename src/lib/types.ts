@@ -17,18 +17,10 @@ export interface SourceImage {
   label?: string;
 }
 
-/**
- * A single planned shot from the director. In walkthrough mode (2+ rooms) a
- * shot is one LEG of a continuous walk: the camera travels from `imageUrl`
- * (start frame) to `endImageUrl` (end frame). Consecutive legs share their
- * boundary photo, so the concatenated film has no visible cuts. A single-room
- * tour falls back to one classic camera-move clip (no endImageUrl).
- */
+/** A single planned shot from the director: one shot per room. */
 export interface Shot {
-  /** The start frame Higgsfield animates from. */
+  /** The room's primary photo: the start frame Higgsfield animates. */
   imageUrl: string;
-  /** Walkthrough leg: the end frame the camera must arrive at. */
-  endImageUrl?: string;
   /**
    * Every photo of this room (primary first). Higgsfield accepts at most two
    * (start + end frame, motion permitting); the rest ground the shotPrompt.

@@ -56,8 +56,7 @@ export function ClipReview({
                   {clip.room}
                 </span>
                 <span className="block truncate text-[12px] text-muted">
-                  {clip.room.includes("→") ? "Continuous walk" : clip.motion} ·{" "}
-                  {clip.caption}
+                  {clip.motion} · {clip.caption}
                 </span>
               </span>
             </div>

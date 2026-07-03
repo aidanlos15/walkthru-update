@@ -135,7 +135,7 @@ function PromptCard({
             {shot.room}
           </span>
           <span className="block text-[12px] text-muted">
-            {shot.room.includes("→") ? "Continuous walk" : shot.motion}
+            {shot.motion}
             {shot.openPlanWith?.length
               ? ` · open-plan with ${shot.openPlanWith.join(", ")}`
               : ""}
