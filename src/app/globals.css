@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Design tokens: "Editorial slate". Single source of truth
+   (mirrored in tailwind.config.ts). Never hardcode a color elsewhere.
+   Cool gray canvas, charcoal text, indigo accent. Shadows, not borders.
+   Instrument Sans only, no serif.
+   ============================================================ */
+:root {
+  --bg: #f3f4f6; /* cool gray canvas */
+  --surface: #ffffff; /* cards (elevation via shadow, not border) */
+  --ink: #1b1f27; /* charcoal primary text */
+  --muted: #6b7280; /* secondary text */
+  --accent: #4f46e5; /* indigo: primary actions, active states */
+  --accent-600: #4338ca; /* indigo hover */
+  --tint: #eef0ff; /* soft indigo fill (selected / icon tiles) */
+  --line: #e5e7eb; /* hairline divider, used sparingly */
+  --success: #0d9488; /* teal: completed states */
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body), system-ui, sans-serif;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-body), system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    background: var(--tint);
+    color: var(--ink);
+  }
+}

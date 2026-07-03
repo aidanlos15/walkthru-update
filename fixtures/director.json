@@ -1,0 +1,41 @@
+{
+  "title": "Sunlit canyon retreat",
+  "shots": [
+    {
+      "imageUrl": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=1200&q=80",
+      "room": "Exterior",
+      "motion": "Push In",
+      "caption": "Arrive somewhere quiet"
+    },
+    {
+      "imageUrl": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80",
+      "room": "Living room",
+      "motion": "Arc Left",
+      "caption": "Light pours in"
+    },
+    {
+      "imageUrl": "https://images.unsplash.com/photo-1556911220-bff31c812dba?w=1200&q=80",
+      "room": "Kitchen",
+      "motion": "Arc Right",
+      "caption": "Cook, host, gather"
+    },
+    {
+      "imageUrl": "https://images.unsplash.com/photo-1600121848594-d8644e57abab?w=1200&q=80",
+      "room": "Bedroom",
+      "motion": "360 Orbit",
+      "caption": "Slow mornings here"
+    },
+    {
+      "imageUrl": "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=1200&q=80",
+      "room": "Bathroom",
+      "motion": "Push In",
+      "caption": "A spa at home"
+    },
+    {
+      "imageUrl": "https://images.unsplash.com/photo-1505691938895-1758d7feb511?w=1200&q=80",
+      "room": "View",
+      "motion": "Zoom Out",
+      "caption": "Endless canyon horizon"
+    }
+  ]
+}
